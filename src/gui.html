@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>CAN Motor WebGUI</title>
+<style>
+  :root { --bg:#0c0f12; --card:#151a20; --ink:#e6eef7; --muted:#90a4b8; --accent:#6aa6ff; --ok:#14d690; --bad:#ff6b6b; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.4 system-ui,Segoe UI,Roboto,Inter,Arial}
+  header{padding:12px 16px;border-bottom:1px solid #1f2630;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  button,select,input[type="number"],input[type="text"]{background:#1b222b;border:1px solid #2a3440;color:var(--ink);border-radius:10px;padding:8px 10px}
+  button{cursor:pointer}
+  .accent{border-color:#2f4d7a}
+  .wrap{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px;max-width:1400px;margin:0 auto}
+  .card{background:var(--card);border:1px solid #1f2630;border-radius:14px;box-shadow:0 6px 20px rgba(0,0,0,.25);display:flex;flex-direction:column;min-height:340px}
+  .card h2{margin:12px 12px 0;font-size:16px}
+  .toolbar{display:grid;grid-template-columns:1fr;gap:8px;margin:10px 12px}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .pill{padding:2px 8px;border-radius:999px;font-size:12px}
+  .ok{background:#16321d;color:#b2f5c9;border:1px solid #245d37}
+  .bad{background:#3a1b1b;color:#ffb2b2;border:1px solid #6b2a2a}
+  .muted{color:var(--muted)}
+  .fixedbox{height:38vh; overflow:auto; margin:6px 12px 12px; border:1px solid #223042;border-radius:12px;background:#0f141a}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:6px 8px;border-bottom:1px solid #1e2833;white-space:nowrap}
+  th{position:sticky;top:0;background:#0f141a;font-weight:600}
+  .log{height:38vh; overflow:auto; margin:6px 12px 12px;padding:10px;border:1px solid #223042;border-radius:12px;background:#0f141a;font-family:ui-monospace,Consolas,Monaco,monospace}
+  /* Dials grid */
+  .dials{display:grid;grid-template-columns:repeat(3,minmax(230px,1fr));gap:12px;margin:0 12px 12px}
+  .dial{background:#0f141a;border:1px solid #223042;border-radius:12px;padding:10px;position:relative}
+  .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:2px}
+  .title{font-weight:600;color:#cfe2ff}
+  .status-dot{width:10px;height:10px;border-radius:999px;border:1px solid #263341}
+  .status-active{background:#1e3d2c;border-color:#2f6e4f;box-shadow:0 0 0 2px rgba(20,214,144,.15)}
+  .status-inactive{background:#263341;border-color:#3a4b5f;opacity:.6}
+  /* meters (your tweaks kept) */
+  .meter{display:grid;place-items:center;margin-top:-40px}
+  .meter svg{width:95%;max-width:320px;}
+  .minmax{display:flex;justify-content:space-between;margin-top:4px;font-size:10px;color:#9bb1c6;width:100%;max-width:320px}
+  .centerBox{position:absolute;left:50%;transform:translateX(-50%);top:78px;text-align:center}
+  .centerInput{background:transparent;border:none;border-bottom:1px dashed #2a3440;color:#fff;font:600 18px/1.2 ui-monospace,Consolas;width:120px;text-align:center;outline:none}
+  .unit{display:block;font-size:11px;color:#9bb1c6;margin-top:2px}
+  .disabled .centerInput{opacity:.45;pointer-events:none}
+  .rangeWrap{margin-top:10px}
+  input[type="range"]{width:100%}
+  .disabled input[type="range"]{opacity:.4;pointer-events:none}
+  /* Pill switches with inside label */
+  .switchPill{position:relative;width:92px;height:36px;border-radius:999px;background:#2a3440;border:1px solid #324156;cursor:pointer;user-select:none;transition:.2s;display:inline-block}
+  .switchPill::before{
+    content: attr(data-label);
+    position:absolute;left:16px;top:50%;transform:translateY(-50%);
+    font-weight:700;letter-spacing:.02em;color:#cfd8e3;
+  }
+  .switchPill::after{
+    content:""; position:absolute; right:4px; top:4px; width:28px; height:28px;
+    border-radius:50%; background:#fff; box-shadow:inset 0 5px 10px rgba(0,0,0,.12); transition:.2s;
+  }
+  .switchPill.on{background:#2a88d8;border-color:#1673bf}
+  .switchPill.on::before{color:#ffffff}
+  .switchPill.on::after{left:4px; right:auto}
+  /* Segmented (3-way) */
+  .seg3{display:inline-flex;border:1px solid #2a3440;border-radius:12px;overflow:hidden}
+  .seg3 button{background:#1b222b;border:0;color:#cfd8e3;padding:8px 14px;font-weight:600;cursor:pointer}
+  .seg3 button+button{border-left:1px solid #2a3440}
+  .seg3 button.active{background:#6a74ff;color:#fff}
+  .seg3.small button{padding:6px 10px}
+  /* Scan chips */
+  .scan {display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 12px 12px}
+  .chip{background:#1b222b;border:1px solid #2a3440;border-radius:999px;padding:4px 8px;font-size:12px;cursor:pointer}
+  .chip:hover{border-color:#3d5675}
+</style>
+</head>
+<body>
+<header>
+  <button id="btnConnect" class="accent">Connect</button>
+  <select id="baud">
+    <option value="230400" selected>230400 baud</option>
+    <option value="115200">115200 baud</option>
+    <option value="921600">921600 baud</option>
+  </select>
+  <span id="status" class="muted">Disconnected</span>
+</header>
+
+<div class="wrap">
+  <!-- Telemetry -->
+  <section class="card">
+    <h2>Telemetry</h2>
+    <div class="toolbar">
+      <div class="row">
+        <label><input type="checkbox" id="autoScroll" checked> Auto-scroll</label>
+        <span class="muted"> | </span>
+        <span>RX:</span> <span id="rxPill" class="pill bad">no</span>
+        <span class="muted"> | </span>
+        <span>Mode:</span> <span id="modeText" class="pill">—</span>
+      </div>
+    </div>
+    <div class="fixedbox" id="teleBox">
+      <table id="teleTable">
+        <thead>
+          <tr><th>Local Time</th><th>Motor ID</th><th>pos (rad)</th><th>vel (rad/s)</th><th>τ/iq</th><th>RX Cnt</th><th>TX Cnt</th></tr>
+        </thead>
+        <tbody id="teleBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Controls -->
+  <section class="card">
+    <h2>Controls & Menu</h2>
+
+    <!-- Row 1 -->
+    <div class="toolbar">
+      <div class="row">
+        <div class="switchPill" id="focSwitch" data-label="FOC" title="FOC"></div>
+
+        <button id="btnZero">Set Zero</button>
+
+        <div class="seg3" id="modeSeg" title="Control mode">
+          <button data-val="P" class="active">Position</button>
+          <button data-val="V">Velocity</button>
+          <button data-val="T">Torque</button>
+        </div>
+
+        <div class="switchPill" id="pidSwitch" data-label="PID" title="PID Edit"></div>
+      </div>
+
+      <!-- Row 2 -->
+      <div class="row">
+        <button id="btnScan" class="accent" title="Scan 1–127">Scan Motors</button>
+
+        <div class="seg3 small" id="idSeg" title="CAN ID">
+          <button data-id="1" class="active">1</button>
+          <button data-id="2">2</button>
+          <button data-id="3">3</button>
+        </div>
+
+        <select id="rate" title="Frequency">
+          <option value="200" selected>200 Hz</option>
+          <option value="100">100 Hz</option>
+          <option value="50">50 Hz</option>
+          <option value="20">20 Hz</option>
+        </select>
+
+        <span class="muted">Manual:</span>
+        <input id="manual" type="text" placeholder='e.g. SET P 1.0 KP 20 KD 0.6' style="width:260px" />
+        <button id="btnSend">Send</button>
+      </div>
+    </div>
+
+    <!-- Discovered IDs -->
+    <div class="scan"><strong>Found:</strong> <div id="scanChips"></div></div>
+
+    <!-- Dials row: left=Position; middle/right swap between Vel/Tau and Kp/Kd -->
+    <div class="dials">
+      <!-- Position -->
+      <div class="dial" id="dialPos">
+        <div class="topbar"><span class="title">Position</span><span id="dotPos" class="status-dot status-active"></span></div>
+        <div class="meter">
+          <svg viewBox="0 0 100 60">
+            <path id="posArcBG" d="M 5 60 A 50 50 0 0 1 95 60" stroke="#263341" stroke-width="10" fill="none" stroke-linecap="round"></path>
+            <path id="posArcFG" d="M 5 60 A 50 50 0 0 1 95 60" stroke="#6aa6ff" stroke-width="10" fill="none" stroke-linecap="round" stroke-dasharray="0 1"></path>
+          </svg>
+          <div class="centerBox"><input id="posCenter" class="centerInput" value="0"><span class="unit">deg</span></div>
+          <div class="minmax"><span id="posMinLbl">-</span><span id="posMaxLbl">-</span></div>
+        </div>
+        <div class="rangeWrap"><input id="posRange" type="range" min="-12.5" max="12.5" step="0.001" value="0"></div>
+      </div>
+
+      <!-- Middle: Velocity or Kp -->
+      <div class="dial" id="dialMidVel">
+        <div class="topbar"><span class="title">Velocity</span><span id="dotVel" class="status-dot status-inactive"></span></div>
+        <div class="meter">
+          <svg viewBox="0 0 100 60">
+            <path id="velArcBG" d="M 5 60 A 50 50 0 0 1 95 60" stroke="#263341" stroke-width="10" fill="none" stroke-linecap="round"></path>
+            <path id="velArcFG" d="M 5 60 A 50 50 0 0 1 95 60" stroke="#9f7aea" stroke-width="10" fill="none" stroke-linecap="round" stroke-dasharray="0 1"></path>
+          </svg>
+          <div class="centerBox"><input id="velCenter" class="centerInput" value="0"><span class="unit">rpm</span></div>
+          <div class="minmax"><span id="velMinLbl">-</span><span id="velMaxLbl">-</span></div>
+        </div>
+        <div class="rangeWrap"><input id="velRange" type="range" min="-30" max="30" step="0.01" value="0"></div>
+      </div>
+
+      <div class="dial" id="dialMidKp" style="display:none">
+        <div class="topbar"><span class="title">Kp</span></div>
+        <div class="meter">
+          <svg viewBox="0 0 100 60">
+            <path d="M 5 60 A 50 50 0 0 1 95 60" stroke="#263341" stroke-width="10" fill="none" stroke-linecap="round"></path>
+            <path id="kpArcFG" d="M 5 60 A 50 50 0 0 1 95 60" stroke="#6aa6ff" stroke-width="10" fill="none" stroke-linecap="round" stroke-dasharray="0 1"></path>
+          </svg>
+          <div class="centerBox"><input id="kpCenter" class="centerInput" value="2.6"><span class="unit">—</span></div>
+          <div class="minmax"><span>0</span><span>20</span></div>
+        </div>
+        <div class="rangeWrap"><input id="kpRange" type="range" min="0" max="20" step="0.1" value="2.6"></div>
+      </div>
+
+      <!-- Right: Torque or Kd -->
+      <div class="dial" id="dialRightTau">
+        <div class="topbar"><span class="title">Torque</span><span id="dotTau" class="status-dot status-inactive"></span></div>
+        <div class="meter">
+          <svg viewBox="0 0 100 60">
+            <path id="tauArcBG" d="M 5 60 A 50 50 0 0 1 95 60" stroke="#263341" stroke-width="10" fill="none" stroke-linecap="round"></path>
+            <path id="tauArcFG" d="M 5 60 A 50 50 0 0 1 95 60" stroke="#2dd4bf" stroke-width="10" fill="none" stroke-linecap="round" stroke-dasharray="0 1"></path>
+          </svg>
+          <div class="centerBox"><input id="tauCenter" class="centerInput" value="0"><span class="unit">Nm</span></div>
+          <div class="minmax"><span id="tauMinLbl">-</span><span id="tauMaxLbl">-</span></div>
+        </div>
+        <div class="rangeWrap"><input id="tauRange" type="range" min="-18" max="18" step="0.01" value="0"></div>
+      </div>
+
+      <div class="dial" id="dialRightKd" style="display:none">
+        <div class="topbar"><span class="title">Kd</span></div>
+        <div class="meter">
+          <svg viewBox="0 0 100 60">
+            <path d="M 5 60 A 50 50 0 0 1 95 60" stroke="#263341" stroke-width="10" fill="none" stroke-linecap="round"></path>
+            <path id="kdArcFG" d="M 5 60 A 50 50 0 0 1 95 60" stroke="#9f7aea" stroke-width="10" fill="none" stroke-linecap="round" stroke-dasharray="0 1"></path>
+          </svg>
+          <div class="centerBox"><input id="kdCenter" class="centerInput" value="9.38"><span class="unit">—</span></div>
+          <div class="minmax"><span>0</span><span>50</span></div>
+        </div>
+        <div class="rangeWrap"><input id="kdRange" type="range" min="0" max="50" step="0.01" value="9.38"></div>
+      </div>
+    </div>
+
+    <!-- Controls log -->
+    <div class="log" id="menuLog"></div>
+  </section>
+</div>
+
+<script>
+/* ===== perf / constants ===== */
+const RENDER_FPS=30, MAX_TELE_ROWS=400, MAX_MENU_ROWS=400, SEND_RATE_MS=33;
+
+/* ===== serial & elements ===== */
+let port, reader, writer, textDecoder;
+const teleBody=document.getElementById('teleBody'), teleBox=document.getElementById('teleBox'), menuLog=document.getElementById('menuLog');
+const rxPill=document.getElementById('rxPill'), modeText=document.getElementById('modeText'), autoScroll=document.getElementById('autoScroll'), statusEl=document.getElementById('status');
+
+/* toggles/segmented */
+const focSwitch=document.getElementById('focSwitch');
+const pidSwitch=document.getElementById('pidSwitch');
+const modeSeg=document.getElementById('modeSeg'), idSeg=document.getElementById('idSeg');
+const rateSel=document.getElementById('rate'); const btnZero=document.getElementById('btnZero'); const btnScan=document.getElementById('btnScan');
+const manual=document.getElementById('manual');
+
+/* dials */
+const posRange=document.getElementById('posRange'), velRange=document.getElementById('velRange'), tauRange=document.getElementById('tauRange');
+const posCenter=document.getElementById('posCenter'), velCenter=document.getElementById('velCenter'), tauCenter=document.getElementById('tauCenter');
+const posMinLbl=document.getElementById('posMinLbl'), posMaxLbl=document.getElementById('posMaxLbl');
+const velMinLbl=document.getElementById('velMinLbl'), velMaxLbl=document.getElementById('velMaxLbl');
+const tauMinLbl=document.getElementById('tauMinLbl'), tauMaxLbl=document.getElementById('tauMaxLbl');
+
+const dotPos=document.getElementById('dotPos'), dotVel=document.getElementById('dotVel'), dotTau=document.getElementById('dotTau');
+const dialPos=document.getElementById('dialPos'), dialMidVel=document.getElementById('dialMidVel'), dialRightTau=document.getElementById('dialRightTau');
+const dialMidKp=document.getElementById('dialMidKp'), dialRightKd=document.getElementById('dialRightKd');
+
+const posArcFG=document.getElementById('posArcFG'), velArcFG=document.getElementById('velArcFG'), tauArcFG=document.getElementById('tauArcFG');
+const kpArcFG=document.getElementById('kpArcFG'), kdArcFG=document.getElementById('kdArcFG');
+
+const scanChips=document.getElementById('scanChips');
+
+/* ===== arc helpers ===== */
+let arcLen=0;
+function initArcs(){
+  arcLen = posArcFG.getTotalLength();
+  [posArcFG,velArcFG,tauArcFG,kpArcFG,kdArcFG].forEach(p=>{
+    if(!p) return; p.style.strokeDasharray=arcLen+' '+arcLen; p.style.strokeDashoffset=arcLen;
+  });
+}
+function setArc(path,frac){ const f=Math.min(1,Math.max(0,frac)); path.style.strokeDashoffset = arcLen*(1-f); }
+function clamp(x,a,b){ return Math.max(a,Math.min(b,x)); }
+function rad2deg(r){ return r*180/Math.PI; } function deg2rad(d){ return d*Math.PI/180; }
+function rs2rpm(x){ return x*60/(2*Math.PI); } function rpm2rs(x){ return x*(2*Math.PI)/60; }
+
+/* ===== rate limit ===== */
+function rateLimit(fn,ms){ let t=0,timer=null,last=null; return (...a)=>{ last=a; const now=performance.now(),rem=ms-(now-t); if(rem<=0){ t=now; fn(...last); last=null; } else if(!timer){ timer=setTimeout(()=>{ timer=null; t=performance.now(); fn(...(last||[])); last=null; }, rem); } }; }
+const sendP=rateLimit(v=>sendLine(`SET P ${v}`),SEND_RATE_MS);
+const sendV=rateLimit(v=>sendLine(`SET V ${v}`),SEND_RATE_MS);
+const sendT=rateLimit(v=>sendLine(`SET T ${v}`),SEND_RATE_MS);
+
+/* ===== generic helpers ===== */
+function sendLine(s){ if(!writer) return; if(!s.endsWith('\n')) s+='\n'; writer.write(new TextEncoder().encode(s)); }
+function setPill(el,on){ el.classList.toggle('on', !!on); }
+function getPillState(el){ return el.classList.contains('on'); }
+function setPillText(el, on){ /* label is constant (FOC/PID) per spec */ }
+
+/* ===== UI setup ===== */
+document.addEventListener('DOMContentLoaded',()=>{
+  initArcs();
+  posMinLbl.textContent = (rad2deg(parseFloat(posRange.min))).toFixed(1)+'°';
+  posMaxLbl.textContent = (rad2deg(parseFloat(posRange.max))).toFixed(1)+'°';
+  velMinLbl.textContent = (rs2rpm(parseFloat(velRange.min))).toFixed(0)+' rpm';
+  velMaxLbl.textContent = (rs2rpm(parseFloat(velRange.max))).toFixed(0)+' rpm';
+  tauMinLbl.textContent = parseFloat(tauRange.min).toFixed(1)+' Nm';
+  tauMaxLbl.textContent = parseFloat(tauRange.max).toFixed(1)+' Nm';
+  posRange.dispatchEvent(new Event('input'));
+  velRange.dispatchEvent(new Event('input'));
+  tauRange.dispatchEvent(new Event('input'));
+});
+
+/* ===== dials binding ===== */
+function bindDial(kind, rangeEl, centerEl, arcEl, toUnit, fromUnit, sender){
+  rangeEl.addEventListener('input', ()=>{
+    const v=parseFloat(rangeEl.value), min=parseFloat(rangeEl.min), max=parseFloat(rangeEl.max);
+    setArc(arcEl,(v-min)/(max-min));
+    centerEl.value = toUnit(v);
+    if(currentMode===kind) sender(v);
+  });
+  const commit=()=>{
+    const u=parseFloat(centerEl.value); if(!Number.isFinite(u)) return;
+    const v=fromUnit(u);
+    rangeEl.value = clamp(v, parseFloat(rangeEl.min), parseFloat(rangeEl.max));
+    setArc(arcEl,(parseFloat(rangeEl.value)-parseFloat(rangeEl.min))/(parseFloat(rangeEl.max)-parseFloat(rangeEl.min)));
+    if(currentMode===kind) sender(rangeEl.value);
+  };
+  centerEl.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); centerEl.blur(); }});
+  centerEl.addEventListener('blur',commit);
+}
+bindDial('P', posRange, posCenter, posArcFG, v=> (Math.round(rad2deg(v)*10)/10).toFixed(1), d=>deg2rad(d), sendP);
+bindDial('V', velRange, velCenter, velArcFG, v=> String(Math.round(rs2rpm(v))), rpm=>rpm2rs(rpm), sendV);
+bindDial('T', tauRange, tauCenter, tauArcFG, v=> v.toFixed(2), x=>x, sendT);
+
+/* KP/KD “dials” (no units) */
+function bindSimpleDial(centerEl, rangeEl, arcEl, cmd){
+  const doSend = (v)=> sendLine(`${cmd} ${v}`);
+  rangeEl.addEventListener('input', ()=>{
+    const v = parseFloat(rangeEl.value);
+    const min = parseFloat(rangeEl.min), max = parseFloat(rangeEl.max);
+    setArc(arcEl,(v-min)/(max-min));
+    centerEl.value = String(v);
+    if (getPillState(pidSwitch)) doSend(v);   // send only when PID pill is ON
+  });
+  const commit = ()=>{
+    const v = parseFloat(centerEl.value);
+    if (!Number.isFinite(v)) return;
+    rangeEl.value = clamp(v, parseFloat(rangeEl.min), parseFloat(rangeEl.max));
+    setArc(arcEl,(parseFloat(rangeEl.value)-parseFloat(rangeEl.min))/(parseFloat(rangeEl.max)-parseFloat(rangeEl.min)));
+    if (getPillState(pidSwitch)) doSend(rangeEl.value);
+  };
+  centerEl.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); centerEl.blur(); }});
+  centerEl.addEventListener('blur',commit);
+}
+bindSimpleDial(document.getElementById('kpCenter'), document.getElementById('kpRange'), kpArcFG, 'SET KP');
+bindSimpleDial(document.getElementById('kdCenter'), document.getElementById('kdRange'), kdArcFG, 'SET KD');
+
+/* ===== segmented controls ===== */
+let currentMode='P', currentID=1;
+function updateModeUI(){
+  const onP=(currentMode==='P'), onV=(currentMode==='V'), onT=(currentMode==='T');
+  [dotPos,dotVel,dotTau].forEach(el=>el.className='status-dot status-inactive');
+  if(onP) dotPos.className='status-dot status-active';
+  if(onV) dotVel.className='status-dot status-active';
+  if(onT) dotTau.className='status-dot status-active';
+  dialPos.classList.toggle('disabled',!onP);
+  dialMidVel.classList.toggle('disabled',!onV);
+  dialRightTau.classList.toggle('disabled',!onT);
+  setText(modeText,currentMode);
+}
+modeSeg.addEventListener('click', e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  [...modeSeg.children].forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); currentMode=b.dataset.val;
+  sendLine(`MODE ${currentMode}`); updateModeUI();
+});
+idSeg.addEventListener('click', e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  [...idSeg.children].forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); currentID=parseInt(b.dataset.id,10);
+  sendLine(`ID ${currentID}`);
+});
+
+/* ===== pill switches ===== */
+focSwitch.addEventListener('click', ()=>{
+  const on = !getPillState(focSwitch);
+  setPill(focSwitch, on);
+  sendLine(`FOC ${on?1:0}`);
+});
+pidSwitch.addEventListener('click', ()=>{
+  const on = !getPillState(pidSwitch);
+  setPill(pidSwitch, on);
+  // swap KP/KD dials into place when ON
+  dialMidVel.style.display = on ? 'none'  : '';
+  dialRightTau.style.display= on ? 'none' : '';
+  dialMidKp.style.display   = on ? ''     : 'none';
+  dialRightKd.style.display = on ? ''     : 'none';
+  // When enabling PID edit, sync current values immediately
+  if (on) {
+    sendLine(`SET KP ${document.getElementById('kpRange').value}`);
+    sendLine(`SET KD ${document.getElementById('kdRange').value}`);
+  }
+});
+
+/* ===== other controls ===== */
+rateSel.addEventListener('change', ()=> sendLine(`RATE ${rateSel.value}`));
+btnZero.addEventListener('click', ()=>{
+  // Reset UI position immediately
+  posRange.value=0; posCenter.value='0';
+  setArc(posArcFG,(0-parseFloat(posRange.min))/(parseFloat(posRange.max)-parseFloat(posRange.min)));
+  if(currentMode==='P') sendLine('SET P 0');
+  sendLine('ZERO');
+});
+document.getElementById('btnSend').addEventListener('click', ()=>{ const s=manual.value.trim(); if(s) sendLine(s); });
+
+/* ===== scan ===== */
+btnScan.addEventListener('click', ()=>{ scanChips.innerHTML=''; sendLine('SCAN'); });
+function addChip(id){
+  for(const c of scanChips.children){ if(Number(c.dataset.id)===id) return; }
+  const d=document.createElement('div'); d.className='chip'; d.dataset.id=id; d.textContent='ID '+id; d.title='Click to select';
+  d.addEventListener('click',()=>{ currentID=id; [...idSeg.children].forEach(x=>x.classList.remove('active')); for(const b of idSeg.children){ if(Number(b.dataset.id)===id) b.classList.add('active'); } sendLine(`ID ${id}`); });
+  scanChips.appendChild(d);
+}
+
+/* ===== throttled render queues ===== */
+const qTele=[], qMenu=[]; let lastTele=null;
+function addTeleRowDOM(o,frag){ const tr=document.createElement('tr'); [new Date(o.ts).toLocaleTimeString(),o.id,o.p,o.v,o.t,o.rxCnt,o.txCnt].forEach(c=>{const td=document.createElement('td'); td.textContent=String(c); tr.appendChild(td);}); frag.appendChild(tr); }
+function setPillStateFromFOC(on){ setPill(focSwitch, on); }
+function flushUI(){
+  if(qTele.length){ const frag=document.createDocumentFragment(); const N=Math.min(qTele.length,20); for(let i=0;i<N;i++) addTeleRowDOM(qTele.shift(),frag); teleBody.appendChild(frag); while(teleBody.children.length>MAX_TELE_ROWS) teleBody.removeChild(teleBody.firstChild); if(autoScroll.checked) teleBox.scrollTop=teleBox.scrollHeight; }
+  if(qMenu.length){ const frag=document.createDocumentFragment(); const N=Math.min(qMenu.length,40); for(let i=0;i<N;i++){ const div=document.createElement('div'); div.textContent=qMenu.shift(); frag.appendChild(div);} menuLog.appendChild(frag); while(menuLog.childNodes.length>MAX_MENU_ROWS) menuLog.removeChild(menuLog.firstChild); menuLog.scrollTop=menuLog.scrollHeight; }
+  if(lastTele){ setPill(rxPill,lastTele.rx); if(lastTele.mode && (lastTele.mode==='P'||lastTele.mode==='V'||lastTele.mode==='T')){ if(currentMode!==lastTele.mode){ currentMode=lastTele.mode; [...modeSeg.children].forEach(x=>x.classList.remove('active')); [...modeSeg.children].find(b=>b.dataset.val===currentMode)?.classList.add('active'); updateModeUI(); } } }
+}
+setInterval(flushUI, 1000/RENDER_FPS);
+
+/* ===== WebSerial connect & reader ===== */
+document.getElementById('btnConnect').addEventListener('click', async ()=>{
+  try{
+    if(!port){
+      port = await navigator.serial.requestPort();
+      await port.open({ baudRate: parseInt(document.getElementById('baud').value,10) });
+      writer = port.writable.getWriter();
+      textDecoder = new TextDecoderStream();
+      port.readable.pipeTo(textDecoder.writable);
+      reader = textDecoder.readable.getReader();
+      statusEl.textContent='Connected';
+      readLoop().catch(()=>{});
+    } else {
+      try{ reader?.releaseLock(); }catch{} try{ writer?.releaseLock(); }catch{} try{ await port.close(); }catch{}
+      port=null; reader=null; writer=null; statusEl.textContent='Disconnected';
+    }
+  }catch(e){ alert(e.message||e); }
+});
+
+async function readLoop(){
+  let buf='';
+  while(port && reader){
+    const {value,done}=await reader.read(); if(done) break;
+    buf += value; let idx;
+    while((idx=buf.indexOf('\n'))>=0){
+      const line=buf.slice(0,idx).trim(); buf=buf.slice(idx+1); if(!line) continue;
+
+      if(line.startsWith('T,')){
+        // T,ts,id,mode,pos,vel,tau,rxOK,rxCnt,txCnt
+        const parts=line.split(',');
+        const obj={ ts:Number(parts[1]), id:parts[2], mode:parts[3], p:Number(parts[4]).toFixed(4), v:Number(parts[5]).toFixed(3), t:Number(parts[6]).toFixed(3), rx:parts[7]==='1', rxCnt:parts[8]??'0', txCnt:parts[9]??'0' };
+        lastTele=obj; qTele.push(obj); if(qTele.length>2000) qTele.splice(0,qTele.length-2000);
+      } else if(line.startsWith('M,')){
+        if(line.startsWith('M,SCAN-FOUND,')){ const id=parseInt(line.split(',')[2]); if(Number.isFinite(id)) addChip(id); }
+        if(line.startsWith('M,SCAN-ASSUME,')){ const id=parseInt(line.split(',')[2]); if(Number.isFinite(id)) addChip(id); }
+        if(line.includes('FOC=ON'))  setPillStateFromFOC(true);
+        if(line.includes('FOC=OFF')) setPillStateFromFOC(false);
+        if(/Zero/i.test(line)){
+          posRange.value=0; posCenter.value='0';
+          setArc(posArcFG,(0-parseFloat(posRange.min))/(parseFloat(posRange.max)-parseFloat(posRange.min)));
+        }
+        qMenu.push(line.slice(2)); if(qMenu.length>2000) qMenu.splice(0,qMenu.length-2000);
+      } else {
+        qMenu.push(line);
+      }
+    }
+  }
+}
+</script>
+</body>
+</html>
