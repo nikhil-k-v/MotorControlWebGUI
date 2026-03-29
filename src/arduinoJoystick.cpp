@@ -32,7 +32,7 @@ struct MotorPacket {
 
 // ---- Joystick ----
 #define JOY_X_PIN  A2
-#define JOY_Y_PIN  A1
+#define JOY_Y_PIN  A1   
 #define JOY_SW_PIN 4
 
 // ---- OLED ----
@@ -114,13 +114,13 @@ void draw_joystick_widget(int cx, int cy, int r, int16_t jx, int16_t jy) {
   display.drawFastHLine(cx - r + 1, cy, (r * 2) - 1, WHITE);
   display.drawFastVLine(cx, cy - r + 1, (r * 2) - 1, WHITE);
 
-  int dx = (int)((float)jy / 512.0f * (r - 4));
-  int dy = (int)(-(float)jx / 512.0f * (r - 4));
+  int dx = (int)(-(float)jy / 512.0f * (r - 4));
+  int dy = (int)((float)jx / 512.0f * (r - 4));
 
   int dot_x = constrain(cx + dx, cx - r + 2, cx + r - 2);
   int dot_y = constrain(cy + dy, cy - r + 2, cy + r - 2);
 
-  display.fillCircle(dot_x, dot_y, 3, WHITE);
+  display.fillCircle(dot_y, dot_x, 3, WHITE);
 }
 
 // ---- Display update ----
